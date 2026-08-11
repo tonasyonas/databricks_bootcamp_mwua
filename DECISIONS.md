@@ -19,11 +19,13 @@ Document key architecture and design decisions here so the team stays aligned an
 - Date fields: standardised to `month_start_date` (derived: date_trunc(month)) for Gold aggregations
 - Contractor tables follow pattern: `bronze_works_orders_{contractor_name}`
 
-## Bronze Layer Design (UC2)
+## Bronze Layer Design (UC2) — Spark Declarative Pipeline
+- **Approach**: Lakeflow Spark Declarative Pipeline (SDP) instead of standalone notebook.
+- **Why SDP over standalone notebook**: Built-in lineage tracking, managed checkpoints (no manual checkpoint paths), schema evolution handled automatically, data quality expectations available for Silver/Gold layers, and single pipeline orchestrates all bronze tables together.
 - **Finance Invoices**: Auto Loader reads paginated JSON, explodes `data` array from API envelope. Preserves nested structs (`vendor`, `line_items`) as raw.
-- **Contractor Works Orders**: Config-driven ingestion via `CONTRACTOR_SOURCES` registry. One bronze table per contractor preserving their original schema. Adding a new contractor = 1 config entry + file drop, zero code changes.
+- **Contractor Works Orders**: Config-driven ingestion via `SOURCE_REGISTRY`. One streaming table per contractor preserving their original schema. Adding a new contractor = 1 config entry + file drop, zero code changes.
+- **Factory pattern**: `_create_streaming_table()` function dynamically registers `@dp.table()` decorated streaming tables from the registry. No hardcoded table definitions.
 - **Audit columns**: `_ingested_at`, `_source_file`, `_contractor_source` on every row for full lineage.
-- **Schema evolution**: enabled via `mergeSchema` to handle source schema changes gracefully.
 - **Why Auto Loader over COPY INTO**: Auto Loader maintains file-level state (exactly-once guarantees), supports schema inference/evolution, and handles incremental arrivals — critical for MWUA's daily batch + irregular SFTP drops.
 
 ## PII Approach

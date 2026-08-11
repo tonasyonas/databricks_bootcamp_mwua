@@ -1,61 +1,71 @@
 # Databricks notebook source
 # DBTITLE 1,Notebook Overview
 # MAGIC %md
-# MAGIC # UC2 — Bronze Ingestion Engine
+# MAGIC # UC2 — Bronze Ingestion Engine (Spark Declarative Pipeline)
 # MAGIC
-# MAGIC A fully parameterized, config-driven ingestion notebook for the **Corporate Data Warehouse** (MWUA Capstone Team 2).
+# MAGIC Fully parameterized, config-driven bronze ingestion for **MWUA Capstone Team 2**.
+# MAGIC
+# MAGIC **Pipeline:** `uc2_bronze_ingestion`  
+# MAGIC **Catalog:** `mwua_capstone_team2`  
+# MAGIC **Schema:** `bronze`
 # MAGIC
 # MAGIC **Design:**
-# MAGIC - All sources defined in a single `SOURCE_REGISTRY` — zero hardcoded paths or table names
-# MAGIC - Auto Loader (`cloudFiles`) for incremental file processing
+# MAGIC - All sources defined in `SOURCE_REGISTRY` — zero hardcoded paths or table names
+# MAGIC - Auto Loader (`cloudFiles`) via streaming tables for incremental processing
+# MAGIC - Factory pattern dynamically registers one `@dp.table()` per config entry
 # MAGIC - Bronze layer preserves raw data as-is — no transformations
-# MAGIC - Audit columns (`_ingested_at`, `_source_file`) added for lineage
-# MAGIC - Schema evolution enabled via `mergeSchema`
+# MAGIC - Audit columns (`_ingested_at`, `_source_file`) for lineage
 # MAGIC - Supports any file format (CSV, JSON, Excel, Parquet, etc.)
 # MAGIC
 # MAGIC **To onboard a new data source:**
-# MAGIC 1. Drop files into the appropriate subfolder under the landing volume
-# MAGIC 2. Add one entry to `SOURCE_REGISTRY` in the Configuration cell
-# MAGIC 3. Re-run the notebook — a new bronze table is created automatically
+# MAGIC 1. Drop files into `/Volumes/mwua_capstone_team2/landing/raw/<folder>/`
+# MAGIC 2. Add one entry to `SOURCE_REGISTRY` below
+# MAGIC 3. Pipeline auto-creates a new streaming table on next run
 # MAGIC
-# MAGIC **No code changes needed** for new sources, formats, or processing modes.
+# MAGIC **No code changes needed.** Checkpoints, schema evolution, and table comments are all managed by SDP.
 
 # COMMAND ----------
 
-# DBTITLE 1,Configuration
+# DBTITLE 1,SDP Bronze Ingestion Engine
+"""UC2 — Bronze Ingestion Engine (Spark Declarative Pipeline)
+
+Fully parameterized, config-driven bronze ingestion for MWUA Capstone Team 2.
+All sources are defined in SOURCE_REGISTRY — adding a new vendor requires only
+one config entry and zero code changes.
+
+Pipeline: uc2_bronze_ingestion
+Catalog:  mwua_capstone_team2
+Schema:   bronze
+"""
+
+from pyspark import pipelines as dp
+from pyspark.sql.functions import current_timestamp, input_file_name, explode, col, lit
+
 # =============================================================================
 # CONFIGURATION — All parameters in one place. Nothing below needs editing.
 # =============================================================================
 
-# --- Environment ---
-CATALOG = "mwua_capstone_team2"
-SCHEMA_BRONZE = "bronze"
-SCHEMA_LANDING = "landing"
-VOLUME_NAME = "raw"
+# Base path for all source files
+VOLUME_PATH = "/Volumes/mwua_capstone_team2/landing/raw"
 
-# --- Derived paths (do not edit) ---
-VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA_LANDING}/{VOLUME_NAME}"
-CHECKPOINT_BASE = f"{VOLUME_PATH}/_checkpoints"
-
-# --- Table naming ---
-TABLE_PREFIX = "bronze"  # All tables will be named: {TABLE_PREFIX}_{source.name}
+# Table naming prefix
+TABLE_PREFIX = "bronze"
 
 # =============================================================================
 # SOURCE REGISTRY
+#
 # Each entry fully describes a data source. The ingestion engine below reads
-# this list and processes each source generically.
+# this list and creates one streaming table per entry — generically.
 #
 # Fields:
-#   name          : Unique identifier → table name becomes {TABLE_PREFIX}_{name}
-#   source_folder : Subfolder under the landing volume
-#   format        : File format for cloudFiles (csv, json, excel, parquet, etc.)
-#   options       : Dict of format-specific read options passed to Auto Loader
-#   envelope_key  : (Optional) If the file wraps data inside a JSON key (e.g.
-#                   paginated API response), set this to explode that array.
-#                   Leave as None for flat files.
-#   multi_line    : (Optional) Set True for pretty-printed JSON. Default False.
-#   tags          : (Optional) Dict of extra metadata columns to add as literals
-#                   e.g. {"_contractor_source": "a"} for lineage grouping.
+#   name          : Unique ID → table name becomes {TABLE_PREFIX}_{name}
+#   source_folder : Subfolder under VOLUME_PATH
+#   format        : File format for cloudFiles (csv, json, parquet, excel, etc.)
+#   options       : Dict of format-specific read options for Auto Loader
+#   envelope_key  : (Optional) JSON key containing the data array to explode.
+#                   Set to None for flat files (CSV, Parquet, etc.)
+#   multi_line    : (Optional) True for pretty-printed JSON. Default False.
+#   tags          : (Optional) Dict of literal columns to add (e.g. source ID)
 #   comment       : (Optional) Table comment for Unity Catalog governance.
 # =============================================================================
 SOURCE_REGISTRY = [
@@ -64,21 +74,22 @@ SOURCE_REGISTRY = [
         "name": "finance_invoices_raw",
         "source_folder": "finance_invoices",
         "format": "json",
-        "options": {},
+        "options": {"cloudFiles.inferColumnTypes": "true"},
         "envelope_key": "data",
         "multi_line": True,
         "tags": {},
         "comment": (
             "Raw ERP finance invoices from paginated JSON API response. "
-            "Contains nested vendor struct and line_items array."
+            "Contains nested vendor struct and line_items array. "
+            "Source: finance_invoices/"
         ),
     },
-    # --- Contractor A ---
+    # --- Contractor A (CSV) ---
     {
         "name": "works_orders_a",
         "source_folder": "works_orders_a",
         "format": "csv",
-        "options": {"header": "true", "inferSchema": "true"},
+        "options": {"header": "true", "cloudFiles.inferColumnTypes": "true"},
         "envelope_key": None,
         "multi_line": False,
         "tags": {"_contractor_source": "a"},
@@ -88,12 +99,12 @@ SOURCE_REGISTRY = [
             "date_completed (DD/MM/YYYY), cost_usd."
         ),
     },
-    # --- Contractor B ---
+    # --- Contractor B (CSV) ---
     {
         "name": "works_orders_b",
         "source_folder": "works_orders_b",
         "format": "csv",
-        "options": {"header": "true", "inferSchema": "true"},
+        "options": {"header": "true", "cloudFiles.inferColumnTypes": "true"},
         "envelope_key": None,
         "multi_line": False,
         "tags": {"_contractor_source": "b"},
@@ -103,12 +114,12 @@ SOURCE_REGISTRY = [
             "CompletionDate (DD/MM/YYYY), Amount."
         ),
     },
-    # --- Contractor C ---
+    # --- Contractor C (CSV) ---
     {
         "name": "works_orders_c",
         "source_folder": "works_orders_c",
         "format": "csv",
-        "options": {"header": "true", "inferSchema": "true"},
+        "options": {"header": "true", "cloudFiles.inferColumnTypes": "true"},
         "envelope_key": None,
         "multi_line": False,
         "tags": {"_contractor_source": "c"},
@@ -119,11 +130,12 @@ SOURCE_REGISTRY = [
         ),
     },
     # --- ADD NEW SOURCES BELOW ---
+    # Example: Adding Contractor D would look like this:
     # {
     #     "name": "works_orders_d",
     #     "source_folder": "works_orders_d",
     #     "format": "csv",
-    #     "options": {"header": "true", "inferSchema": "true"},
+    #     "options": {"header": "true", "cloudFiles.inferColumnTypes": "true"},
     #     "envelope_key": None,
     #     "multi_line": False,
     #     "tags": {"_contractor_source": "d"},
@@ -131,53 +143,14 @@ SOURCE_REGISTRY = [
     # },
 ]
 
-# --- Set catalog context ---
-spark.sql(f"USE CATALOG {CATALOG}")
-spark.sql(f"USE SCHEMA {SCHEMA_BRONZE}")
 
-# --- Print summary ---
-print(f"Catalog:       {CATALOG}")
-print(f"Bronze schema: {SCHEMA_BRONZE}")
-print(f"Volume path:   {VOLUME_PATH}")
-print(f"Checkpoints:   {CHECKPOINT_BASE}")
-print(f"Table prefix:  {TABLE_PREFIX}")
-print(f"\nRegistered sources ({len(SOURCE_REGISTRY)}):")
-for src in SOURCE_REGISTRY:
-    print(f"  • {TABLE_PREFIX}_{src['name']} ← {src['source_folder']}/ ({src['format']})")
-
-# COMMAND ----------
-
-# DBTITLE 1,Ingestion Engine
-# MAGIC %md
-# MAGIC ## Ingestion Engine
-# MAGIC
-# MAGIC The function below processes **any** source defined in `SOURCE_REGISTRY`. It handles:
-# MAGIC - Flat files (CSV, Excel, Parquet) → direct ingest
-# MAGIC - Envelope-wrapped JSON (paginated APIs) → explode the specified key
-# MAGIC - Custom literal tags per source (e.g. `_contractor_source`)
-# MAGIC - Audit columns for lineage (`_ingested_at`, `_source_file`)
-# MAGIC
-# MAGIC All behaviour is driven purely by the config — no source-specific code paths.
-
-# COMMAND ----------
-
-# DBTITLE 1,Generic Ingestion Function
-from pyspark.sql.functions import current_timestamp, input_file_name, explode, col, lit
+# =============================================================================
+# INGESTION ENGINE — Generic factory that creates one streaming table per source
+# =============================================================================
 
 
-def ingest_source(source_config: dict) -> None:
-    """
-    Ingest a single data source into a bronze Delta table.
-
-    Handles both flat files and envelope-wrapped JSON generically based
-    on the source_config parameters. Zero hardcoded logic.
-
-    Args:
-        source_config: Dict from SOURCE_REGISTRY with keys:
-            name, source_folder, format, options, envelope_key,
-            multi_line, tags, comment
-    """
-    # --- Resolve all parameters from config ---
+def _create_streaming_table(source_config: dict):
+    """Factory: registers a streaming table for a single SOURCE_REGISTRY entry."""
     name = source_config["name"]
     source_folder = source_config["source_folder"]
     file_format = source_config["format"]
@@ -187,114 +160,54 @@ def ingest_source(source_config: dict) -> None:
     tags = source_config.get("tags", {})
     comment = source_config.get("comment", "")
 
-    # --- Derive paths from base config ---
     table_name = f"{TABLE_PREFIX}_{name}"
-    full_table_name = f"{CATALOG}.{SCHEMA_BRONZE}.{table_name}"
     source_path = f"{VOLUME_PATH}/{source_folder}/"
-    checkpoint_path = f"{CHECKPOINT_BASE}/{table_name}"
-    schema_path = f"{CHECKPOINT_BASE}/{table_name}/_schema"
 
-    print(f"\n{'='*60}")
-    print(f"Source:     {source_path}")
-    print(f"Table:      {full_table_name}")
-    print(f"Format:     {file_format} | Envelope: {envelope_key or 'None (flat)'}")
-    print(f"Options:    {read_options}")
-    print(f"Tags:       {tags}")
-    print(f"{'='*60}")
-
-    # --- Build the readStream ---
-    reader = (
-        spark.readStream
-        .format("cloudFiles")
-        .option("cloudFiles.format", file_format)
-        .option("cloudFiles.schemaLocation", schema_path)
-    )
-
-    # Apply multi-line option for JSON
-    if multi_line:
-        reader = reader.option("multiLine", "true")
-
-    # Apply all format-specific options from config
-    for key, value in read_options.items():
-        reader = reader.option(key, value)
-
-    # --- Load and optionally explode envelope ---
-    df = reader.load(source_path)
-
-    if envelope_key:
-        # Source has a wrapper (e.g. paginated API envelope)
-        # Explode the specified array key to get individual records
-        df = (
-            df.select(explode(col(envelope_key)).alias("_record"), "_metadata")
-            .select("_record.*", "_metadata")
+    @dp.table(name=table_name, comment=comment)
+    def _ingestion_fn():
+        # Build Auto Loader reader
+        reader = (
+            spark.readStream
+            .format("cloudFiles")
+            .option("cloudFiles.format", file_format)
         )
 
-    # --- Add audit columns ---
-    df = (
-        df
-        .withColumn("_ingested_at", current_timestamp())
-        .withColumn("_source_file", input_file_name())
-    )
+        # Apply multi-line for pretty-printed JSON
+        if multi_line:
+            reader = reader.option("multiLine", "true")
 
-    # --- Add any custom literal tag columns from config ---
-    for tag_col, tag_value in tags.items():
-        df = df.withColumn(tag_col, lit(tag_value))
+        # Apply all format-specific options from config
+        for key, value in read_options.items():
+            reader = reader.option(key, value)
 
-    # --- Write to Delta ---
-    (
-        df.writeStream
-        .format("delta")
-        .option("checkpointLocation", checkpoint_path)
-        .option("mergeSchema", "true")
-        .outputMode("append")
-        .trigger(availableNow=True)
-        .toTable(full_table_name)
-    )
+        # Load from source path
+        df = reader.load(source_path)
 
-    print(f"✓ {table_name} ingestion started")
+        # Handle envelope-wrapped sources (e.g. paginated JSON API responses)
+        if envelope_key:
+            df = (
+                df.select(explode(col(envelope_key)).alias("_record"))
+                .select("_record.*")
+            )
 
-    # --- Apply table comment if provided ---
-    if comment:
-        # Escape single quotes in comment
-        safe_comment = comment.replace("'", "\\'")
-        spark.sql(f"COMMENT ON TABLE {full_table_name} IS '{safe_comment}'")
-        print(f"✓ Comment applied to {table_name}")
+        # Add audit metadata columns
+        df = (
+            df
+            .withColumn("_ingested_at", current_timestamp())
+            .withColumn("_source_file", input_file_name())
+        )
 
-# COMMAND ----------
+        # Add any custom literal tag columns from config
+        for tag_col, tag_value in tags.items():
+            df = df.withColumn(tag_col, lit(tag_value))
 
-# DBTITLE 1,Execute Ingestion
-# MAGIC %md
-# MAGIC ## Execute Ingestion
-# MAGIC
-# MAGIC Loop through the entire `SOURCE_REGISTRY` and ingest each source. Idempotent — safe to re-run (Auto Loader tracks processed files via checkpoints).
+        return df
 
-# COMMAND ----------
+    return _ingestion_fn
 
-# DBTITLE 1,Run All Sources
+
 # =============================================================================
-# EXECUTE: Ingest all registered sources
+# REGISTER ALL SOURCES — Loop creates one streaming table per registry entry
 # =============================================================================
-results = {"success": [], "failed": []}
-
-for source in SOURCE_REGISTRY:
-    try:
-        ingest_source(source)
-        results["success"].append(source["name"])
-    except Exception as e:
-        print(f"\n✗ FAILED: {source['name']} — {e}")
-        results["failed"].append((source["name"], str(e)))
-
-# --- Summary ---
-print(f"\n\n{'='*60}")
-print(f"INGESTION SUMMARY")
-print(f"{'='*60}")
-print(f"✓ Succeeded: {len(results['success'])} / {len(SOURCE_REGISTRY)}")
-for name in results["success"]:
-    print(f"    • {TABLE_PREFIX}_{name}")
-
-if results["failed"]:
-    print(f"\n✗ Failed: {len(results['failed'])} / {len(SOURCE_REGISTRY)}")
-    for name, err in results["failed"]:
-        print(f"    • {TABLE_PREFIX}_{name}: {err}")
-else:
-    print(f"\n✓ All sources ingested successfully.")
+for _source in SOURCE_REGISTRY:
+    _create_streaming_table(_source)
