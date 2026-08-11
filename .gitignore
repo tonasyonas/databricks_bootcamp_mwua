@@ -1,0 +1,19 @@
+# Databricks
+.databricks/
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+
+# Environment
+.env
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Data files (never commit raw data)
+*.csv
+*.json
+*.xlsx
+*.parquet
