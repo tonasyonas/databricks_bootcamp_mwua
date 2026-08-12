@@ -4,7 +4,7 @@ from pyspark.sql.window import Window
 
 
 @dp.materialized_view(
-    name="prd_mwua_capstone_team2.silver.customer_pii",
+    name="silver.customer_pii",
     comment="Customer PII data separated from analytics tables. In production, apply column masking via Unity Catalog.",
     cluster_by=["account_id"]
 )
@@ -14,7 +14,7 @@ def customer_pii():
     w = Window.partitionBy("account_id").orderBy(F.col("billing_period").desc())
 
     return (
-        spark.read.table("prd_mwua_capstone_team2.bronze.billing_customer")
+        spark.read.table("bronze.billing_customer")
         .withColumn("_row_num", F.row_number().over(w))
         .filter(F.col("_row_num") == 1)
         .select(

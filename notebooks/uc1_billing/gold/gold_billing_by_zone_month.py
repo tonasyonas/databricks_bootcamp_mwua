@@ -3,7 +3,7 @@ from pyspark.sql import functions as F
 
 
 @dp.materialized_view(
-    name="prd_mwua_capstone_team2.gold.billing_by_zone_month",
+    name="gold.billing_by_zone_month",
     comment="Monthly billing aggregation by service zone",
     cluster_by=["service_zone", "month_start_date"]
 )
@@ -14,7 +14,7 @@ from pyspark.sql import functions as F
 })
 def gold_billing_by_zone_month():
     return (
-        spark.read.table("prd_mwua_capstone_team2.silver.billing_consumption")
+        spark.read.table("silver.billing_consumption")
         .groupBy("service_zone", "month_start_date")
         .agg(
             F.sum("consumption_m3").alias("total_consumption"),

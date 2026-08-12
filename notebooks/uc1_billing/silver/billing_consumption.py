@@ -4,7 +4,7 @@ from pyspark.sql.window import Window
 
 
 @dp.materialized_view(
-    name="prd_mwua_capstone_team2.silver.billing_consumption",
+    name="silver.billing_consumption",
     comment="Cleansed billing consumption facts, deduplicated on account_id + meter_id + month",
     cluster_by=["service_zone", "month_start_date"]
 )
@@ -20,7 +20,7 @@ def billing_consumption():
     w = Window.partitionBy("account_id", "meter_id", "month_start_date").orderBy("billing_period")
 
     return (
-        spark.read.table("prd_mwua_capstone_team2.bronze.billing_customer")
+        spark.read.table("bronze.billing_customer")
         .withColumn(
             "month_start_date",
             F.date_trunc("month", F.col("billing_period")).cast("date")

@@ -2,7 +2,7 @@ from pyspark import pipelines as dp
 
 
 @dp.table(
-    name="prd_mwua_capstone_team2.bronze.billing_customer",
+    name="bronze.billing_customer",
     comment="Raw billing customer data ingested from CSV via Auto Loader"
 )
 @dp.expect("no_rescued_data", "_rescued_data IS NULL")
