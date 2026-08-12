@@ -63,16 +63,16 @@
 # MAGIC | 2 | **Who should have access to unmasked PII columns?** | `customer_name`, `address`, `contact_number` are currently readable by anyone with table access. | No masking configured | Unauthorized PII access → data breach risk. | _TBD_ | ⏳ |
 # MAGIC | 3 | **Should reference data changes (dim_zone) require an approval workflow?** | Currently anyone with write access can modify the zone master table. All changes are tracked via Change Data Feed. | No approval workflow | Accidental changes to zone definitions affect all downstream pipelines. | _TBD_ | ⏳ |
 # MAGIC | 4 | **What is the process for right-to-erasure (PDPA) requests?** | If a customer requests data deletion, we need to purge their records from `silver.customer_pii` and any derived tables. | No process defined | Non-compliance → regulatory penalty. | _TBD_ | ⏳ |
-
+# MAGIC
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## UC2: Finance & Contractors Pipeline
 # MAGIC **Ask:** Databricks SA (checkpoint review)
-# MAGIC 
+# MAGIC
 # MAGIC ### Pipeline Design & Data Quality
-# MAGIC 
+# MAGIC
 # MAGIC | # | Question | Context | Current State | Decision | Status |
 # MAGIC |---|----------|---------|---------------|----------|--------|
 # MAGIC | 1 | **Is it correct to keep `silver.finance_invoices` as a streaming table?** | It currently joins `dim_zone` to get `zone_id`, but gold only uses `site_zone` (the raw zone name). We propose removing the join and using an expectation for validation instead. | ST with dim_zone join | _TBD_ | ⏳ |
@@ -81,9 +81,9 @@
 # MAGIC | 4 | **Are the 14 dropped rows (empty currency field) expected?** | Source has `currency = ""` (empty string) for 14 of 420 invoices. Jonas drops them via `currency = 'SGD'` filter. Are these test data, foreign invoices, or a source bug? | Drop silently | _TBD_ | ⏳ |
 # MAGIC | 5 | **Is deduplication needed on `invoice_id`?** | Source is paginated JSON (9 files). If the ERP re-exports, same invoice could appear twice. Currently no dedup. | No dedup | _TBD_ | ⏳ |
 # MAGIC | 6 | **Should `silver.works_orders` track which source file each record came from?** | Currently tracks `contractor_source` (a/b/c) but not the file path. Useful for debugging re-ingestion issues. | contractor_source only | _TBD_ | ⏳ |
-# MAGIC 
+# MAGIC
 # MAGIC ### UC2 Source Data Confirmation
-# MAGIC 
+# MAGIC
 # MAGIC | # | Question | Context | Decision | Status |
 # MAGIC |---|----------|---------|----------|--------|
 # MAGIC | 1 | **Is the finance ERP export a one-time snapshot or recurring?** | Currently 420 invoices across 9 pages. Will new pages arrive daily/monthly? This affects whether streaming table is appropriate. | _TBD_ | ⏳ |
@@ -95,9 +95,9 @@
 # MAGIC %md
 # MAGIC ## Gold Tables Review (UC1 + UC2 + UC3)
 # MAGIC **Ask:** Databricks SA (checkpoint review)
-# MAGIC 
+# MAGIC
 # MAGIC ### Are the gold tables fit for purpose?
-# MAGIC 
+# MAGIC
 # MAGIC | # | Gold Table | Business Question It Answers | Ask SA | Decision | Status |
 # MAGIC |---|-----------|------------------------------|--------|----------|--------|
 # MAGIC | 1 | `gold.billing_by_zone_month` (UC1) | Monthly consumption totals, billing amounts, and overdue rates per zone | Is this the right grain? Should we also have per-account or per-meter gold views? | _TBD_ | ⏳ |
@@ -105,9 +105,9 @@
 # MAGIC | 3 | `gold.contractor_by_zone_month` (UC2) | Monthly work order count and cost by zone and contractor | Is this actionable? Should it include work order descriptions (top categories)? | _TBD_ | ⏳ |
 # MAGIC | 4 | `gold.network_health_by_zone_month` (UC3) | Monthly avg pressure/flow for reliable locations only | Only 3 of 6 zones have data — is this acceptable for a dashboard? Or should we show all 6 with reliability warnings? | _TBD_ | ⏳ |
 # MAGIC | 5 | `gold.network_health_diagnostic_by_zone_month` (UC3) | All-data view with reliability metrics for engineering | Is this the right split (reliable vs diagnostic)? Or should there be one view with a `reliability_tier` column? | _TBD_ | ⏳ |
-# MAGIC 
+# MAGIC
 # MAGIC ### Cross-Cutting Gold Table
-# MAGIC 
+# MAGIC
 # MAGIC | # | Question | Options | Decision | Status |
 # MAGIC |---|----------|---------|----------|--------|
 # MAGIC | 1 | **What business question should the cross-cutting gold table answer?** | (a) Zone overview dashboard (billing + spend + network health in one view), (b) Cost-efficiency analysis (spend vs consumption), (c) SLA performance vs investment, (d) Other? | _TBD_ | ⏳ |
@@ -117,15 +117,12 @@
 # MAGIC | 5 | **Should it enrich with `dim_zone` attributes?** | Adding `region`, `population_served`, `sla_response_hours` would make it richer for dashboards. | _TBD_ | ⏳ |
 # MAGIC | 6 | **How to handle missing zones?** | UC3 reliable view only covers 3 zones. Show NULLs for telemetry columns? Or only include zones that have ALL data? | _TBD_ | ⏳ |
 # MAGIC | 7 | **Is monthly by zone the right grain?** | Matches all upstream gold tables. But should the cross-cutting view pre-compute any ratios (e.g., spend per m³ consumed, cost per work order)? | _TBD_ | ⏳ |
-# MAGIC 
-# MAGIC ### General Pipeline Architecture Questions
-# MAGIC 
+# MAGIC
+# MAGIC ### Capstone Logistics (SA only)
+# MAGIC
 # MAGIC | # | Question | Context | Decision | Status |
 # MAGIC |---|----------|---------|----------|--------|
-# MAGIC | 1 | **Is per-UC pipeline the right strategy?** | We have 3 independent pipelines (UC1, UC2, UC3). Pros: isolation, independent deployment. Cons: no shared bronze, harder to build cross-cutting views. | _TBD_ | ⏳ |
-# MAGIC | 2 | **Should silver tables that only do structural transforms (flatten, explode) be streaming tables?** | Our convention: ST for structural, MV for joins/dedup/aggregation. Is this correct? | _TBD_ | ⏳ |
-# MAGIC | 3 | **Is our two-tier expectation pattern (FAIL/DROP for integrity, WARN for business logic) aligned with best practice?** | We never FAIL on aggregate values, only on NULL grouping keys. Jonas FAILs on `total_spend > 0`. Who's right? | _TBD_ | ⏳ |
-# MAGIC | 4 | **For the capstone demo, do we need all 3 pipelines running end-to-end, or is code + documentation sufficient?** | All 3 pipelines currently run successfully in dev. | _TBD_ | ⏳ |
+# MAGIC | 1 | **For the capstone demo, do we need all 3 pipelines running end-to-end, or is code + documentation sufficient?** | All 3 pipelines currently run successfully in dev. | _TBD_ | ⏳ |
 
 # COMMAND ----------
 
