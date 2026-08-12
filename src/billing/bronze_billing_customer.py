@@ -5,7 +5,8 @@ from pyspark import pipelines as dp
     name="bronze.billing_customer",
     comment="Raw billing customer data ingested from CSV via Auto Loader"
 )
-@dp.expect_or_drop("no_rescued_data", "_rescued_data IS NULL")
+# WARN only: bronze preserves all data. Investigate rescued rows separately.
+@dp.expect("no_rescued_data", "_rescued_data IS NULL")
 def bronze_billing_customer():
     return (
         spark.readStream.format("cloudFiles")
