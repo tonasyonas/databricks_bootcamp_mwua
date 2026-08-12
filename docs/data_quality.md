@@ -69,7 +69,7 @@ Discovered during profiling of the source data:
 | Issue | Source | Count | Resolution |
 |-------|--------|-------|------------|
 | Empty currency field | finance_invoices_raw | 14/420 rows | Dropped at silver (`currency = 'SGD'` check) |
-| Nullable project_code | finance_invoices_raw | 85/420 rows | Allowed — legitimate business case (not all invoices are project-linked) |
+| Nullable project_code | finance_invoices_raw | 80/406 rows (~20%) | Allowed at silver (soft expectation tracks rate); coalesced to 'OPEX-UNALLOCATED' at gold for dashboard display. See Assumption #7 below. |
 | "SGD " prefix on charge | works_orders_c | All rows | Stripped via `regexp_replace` in silver transformation |
 
 ## Zone Reference Set
@@ -114,6 +114,35 @@ the join succeeded (i.e., the source zone value exists in the reference table). 
 6. **No deduplication logic:** All primary keys were verified unique during profiling. We rely
    on expectations to catch future violations rather than building dedup transforms. If duplicates
    appear in future loads, this should be revisited with an explicit dedup strategy.
+
+7. **Null project_code = operational/overhead spend (OPEX-UNALLOCATED):**
+   ~20% of invoices (80/406) have null `project_code`. Analysis shows:
+   - Evenly distributed across all 7 months (10–25% per month) — not a backfill/lag issue
+   - Present in all 6 zones — not region-specific
+   - Spread across many distinct vendors (7–15 per zone) — not a single vendor miscoding
+
+   **Assumption:** These represent legitimate operational expenditure (routine maintenance,
+   utilities, admin services) not allocated to a capital project in the ERP system.
+
+   **Implementation (DONE):**
+   - Silver (`silver_finance_invoices.py`): `@dp.expect("has_project_code", "project_code IS NOT NULL")`
+     — soft/warn tracks the null rate. If rate spikes above baseline ~20%, signals source issue.
+   - Gold (`gold_spend_by_zone_month.py`): `F.coalesce(F.col("project_code"), F.lit("OPEX-UNALLOCATED"))`
+     — gives dashboards a filterable category; total spend figures remain accurate.
+
+   **Risk:** If assumption is wrong (nulls are pending assignment that backfills later),
+   the 'OPEX-UNALLOCATED' label could mislead budget analysis. See Open Questions Q1.
+
+## Open Questions
+
+Questions requiring stakeholder input before assumptions can be fully validated:
+
+| # | Question | Context | Owner | Status |
+|---|----------|---------|-------|--------|
+| Q1 | Do null `project_code` invoices represent operational/overhead spend, or pending project assignment that backfills later? | ~20% of invoices have no project code. We assumed OPEX but need confirmation. | Finance Team | OPEN |
+| Q2 | Should 'OPEX-UNALLOCATED' spend be broken down further (e.g., by cost_center or vendor category) for budget reporting? | Currently aggregated as a single bucket in gold. May need finer granularity. | Finance Team / PMO | OPEN |
+| Q3 | Is there a maximum acceptable null rate for `project_code` before it indicates an ERP data entry issue? | Current baseline is ~20%. Need a threshold for alerting. | Finance Team | OPEN |
+| Q4 | Should 'OPEX-UNALLOCATED' be included or excluded by default in project-level spend dashboards? | Including inflates project totals; excluding understates total zone spend. | Dashboard consumers | OPEN |
 
 ## Monitoring & Observability
 

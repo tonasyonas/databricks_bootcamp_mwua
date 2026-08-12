@@ -1,4 +1,4 @@
-name: "Deploy Customer Billing Pipeline"
+name: "Deploy Pipelines"
 
 on:
   pull_request:
@@ -7,6 +7,11 @@ on:
   push:
     branches:
       - main
+
+env:
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
 jobs:
   # Validate bundle on every PR
@@ -19,12 +24,8 @@ jobs:
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
 
-      - name: Validate bundle
+      - name: Validate bundle (prod target)
         run: databricks bundle validate -t prod
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
   # Deploy to production on merge to main
   deploy-prod:
@@ -38,14 +39,6 @@ jobs:
 
       - name: Deploy to production
         run: databricks bundle deploy -t prod
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
-      - name: Run pipeline update
-        run: databricks bundle run -t prod customer_billing
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      - name: Run finance-contractors pipeline
+        run: databricks bundle run -t prod finance_contractors_daily_job

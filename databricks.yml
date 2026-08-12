@@ -45,6 +45,7 @@ targets:
     mode: production
     workspace:
       host: https://dbc-d8b9acd9-b19b.cloud.databricks.com
+      root_path: /Workspace/Users/jonas.tua@ncs.com.sg/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: prd_mwua_capstone_team2
       volume_base_path: /Volumes/prd_mwua_capstone_team2/landing/raw

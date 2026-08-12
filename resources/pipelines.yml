@@ -17,3 +17,18 @@ resources:
             include: ../src/contractors/bronze_works_orders_b.py
         - glob:
             include: ../src/contractors/bronze_works_orders_c.py
+
+    finance_contractors_daily:
+      name: "${bundle.target}-team2-mwua-finance-contractors-daily"
+      catalog: ${var.catalog}
+      schema: bronze
+      serverless: true
+      photon: true
+      channel: CURRENT
+      configuration:
+        volume_base_path: ${var.volume_base_path}
+      libraries:
+        - glob:
+            include: ../src/contractors/**
+        - glob:
+            include: ../src/finance/**

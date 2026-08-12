@@ -1,1 +1,17 @@
-resources: {}
+resources:
+  jobs:
+    finance_contractors_daily_job:
+      name: "${bundle.target}-team2-mwua-finance-contractors-daily-job"
+      schedule:
+        quartz_cron_expression: "0 0 7 * * ?"
+        timezone_id: Asia/Singapore
+      tasks:
+        - task_key: refresh_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.finance_contractors_daily.id}
+            full_refresh: false
+      queue:
+        enabled: true
+      email_notifications:
+        on_failure:
+          - jonas.tua@ncs.com.sg

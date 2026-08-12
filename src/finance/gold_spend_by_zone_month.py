@@ -26,7 +26,7 @@ def gold_spend_by_zone_month():
         line_items.join(invoices, "invoice_id")
         .groupBy(
             F.col("site_zone"),
-            F.col("project_code"),
+            F.coalesce(F.col("project_code"), F.lit("OPEX-UNALLOCATED")).alias("project_code"),
             F.date_trunc("month", F.col("invoice_date")).alias("invoice_month"),
         )
         .agg(
