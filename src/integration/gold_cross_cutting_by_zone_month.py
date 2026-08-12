@@ -1,3 +1,4 @@
+# Databricks notebook source
 from pyspark import pipelines as dp
 from pyspark.sql import functions as F
 
@@ -232,3 +233,4 @@ def zone_performance_monthly():
         "network_reliability_flag",
         "data_sources_available"
     )
+
