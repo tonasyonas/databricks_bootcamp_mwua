@@ -4,11 +4,11 @@ from pyspark.sql.window import Window
 
 
 @dp.materialized_view(
-    name="silver.billing_consumption",
+    name="prd_mwua_capstone_team2.silver.billing_consumption",
     comment="Cleansed billing consumption facts, deduplicated on account_id + meter_id + month",
     cluster_by=["service_zone", "month_start_date"]
 )
-@dp.expect_all({
+@dp.expect_all_or_drop({
     "valid_account_id": "account_id IS NOT NULL",
     "valid_meter_id": "meter_id IS NOT NULL",
     "valid_consumption": "consumption_m3 >= 0",
@@ -20,7 +20,7 @@ def billing_consumption():
     w = Window.partitionBy("account_id", "meter_id", "month_start_date").orderBy("billing_period")
 
     return (
-        spark.read.table("bronze.billing_customer")
+        spark.read.table("prd_mwua_capstone_team2.bronze.billing_customer")
         .withColumn(
             "month_start_date",
             F.date_trunc("month", F.col("billing_period")).cast("date")
