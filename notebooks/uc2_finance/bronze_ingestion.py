@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # DBTITLE 1,Notebook Overview
 # MAGIC %md
 # MAGIC # UC2 — Bronze Ingestion Engine (Spark Declarative Pipeline)
