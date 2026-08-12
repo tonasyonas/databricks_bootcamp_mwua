@@ -8,11 +8,48 @@ variables:
   catalog:
     description: Unity Catalog catalog for pipeline output
     default: dev_mwua_catalog_team2
+  source_volume_path:
+    description: Volume path for raw billing customer data
+    default: /Volumes/prd_mwua_capstone_team2/landing/raw/billing_customer/
   volume_base_path:
     description: Base Unity Catalog volume path for raw source files
     default: /Volumes/dev_mwua_catalog_team2/landing/raw
+
+resources:
+  pipelines:
+    customer_billing:
+      name: "Customer Billing Pipeline - ${bundle.target}"
+      catalog: ${var.catalog}
+      schema: default
+      serverless: true
+      channel: CURRENT
+      libraries:
+        - glob:
+            include: ./notebooks/uc1_billing/bronze/**
+        - glob:
+            include: ./notebooks/uc1_billing/silver/**
+        - glob:
+            include: ./notebooks/uc1_billing/gold/**
 
 targets:
   dev:
     mode: development
     default: true
+    workspace:
+      host: https://dbc-d8b9acd9-b19b.cloud.databricks.com
+    variables:
+      catalog: dev_mwua_catalog_team2
+      volume_base_path: /Volumes/dev_mwua_catalog_team2/landing/raw
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-d8b9acd9-b19b.cloud.databricks.com
+    variables:
+      catalog: prd_mwua_capstone_team2
+      volume_base_path: /Volumes/prd_mwua_capstone_team2/landing/raw
+    git:
+      branch: main
+    permissions:
+      - group_name: users
+        level: CAN_VIEW
