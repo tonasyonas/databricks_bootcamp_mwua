@@ -1,0 +1,19 @@
+resources:
+  pipelines:
+    bronze_ingestion:
+      name: bronze_ingestion
+      catalog: ${var.catalog}
+      schema: bronze
+      serverless: true
+      channel: CURRENT
+      configuration:
+        volume_base_path: ${var.volume_base_path}
+      libraries:
+        - glob:
+            include: ../src/finance/bronze_finance_invoices.py
+        - glob:
+            include: ../src/contractors/bronze_works_orders_a.py
+        - glob:
+            include: ../src/contractors/bronze_works_orders_b.py
+        - glob:
+            include: ../src/contractors/bronze_works_orders_c.py

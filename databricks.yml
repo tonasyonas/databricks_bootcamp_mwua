@@ -1,0 +1,18 @@
+bundle:
+  name: mwua-capstone
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog for pipeline output
+    default: dev_mwua_catalog_team2
+  volume_base_path:
+    description: Base Unity Catalog volume path for raw source files
+    default: /Volumes/dev_mwua_catalog_team2/landing/raw
+
+targets:
+  dev:
+    mode: development
+    default: true
