@@ -1,25 +1,24 @@
+# Materialized view. Hard constraints enforced via filter() using the shared
+# valid_network_reading() condition — not a @expect_or_drop decorator — so this
+# table is eligible to test for incremental refresh. Soft anomaly checks live
+# in silver_dq_network_telemetry, and dropped rows are captured in
+# silver_quarantine_network_telemetry. Verify actual behavior in the pipeline
+# UI rather than assuming.
+
 from pyspark import pipelines as dp
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from _network_telemetry_hard_rules import valid_network_reading
 
 
 @dp.materialized_view(
     name="silver.network_telemetry",
-    comment="Cleansed sensor readings with data quality flags. Flags duplicates and uncertain zone assignments rather than dropping them. Anomaly ranges configurable via pipeline params.",
+    comment="Cleansed sensor readings with data quality flags. Flags "
+            "duplicates and uncertain zone assignments rather than dropping "
+            "them. Hard constraints enforced via filter(), not @expect_or_drop, "
+            "so this table is eligible to test for incremental refresh.",
     cluster_by=["location_id", "month_start_date"]
 )
-# Hard constraints (DROP): sensor_id and timestamp must exist for a reading to be meaningful
-@dp.expect_all_or_drop({
-    "valid_sensor_id": "sensor_id IS NOT NULL",
-    "valid_timestamp": "reading_ts IS NOT NULL",
-    "valid_reading_value": "reading_value IS NOT NULL"
-})
-# Soft constraints (WARN): anomaly detection — flag but never drop
-@dp.expect_all({
-    "pressure_in_range": "reading_type != 'pressure' OR (reading_value BETWEEN -2 AND 8)",
-    "flow_in_range": "reading_type != 'flow' OR (reading_value BETWEEN -50 AND 150)",
-    "zone_is_resolved": "zone_is_uncertain = FALSE"
-})
 def network_telemetry():
     # Parse timestamp and derive month
     readings = (
@@ -52,6 +51,7 @@ def network_telemetry():
 
     return (
         readings_with_zone
+        .filter(valid_network_reading())
         .withColumn("_row_num", F.row_number().over(w))
         .withColumn("is_duplicate", F.col("_row_num") > 1)
         .select(
