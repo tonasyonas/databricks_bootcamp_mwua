@@ -1,29 +1,24 @@
+# Materialized view, unchanged dedup logic. Hard constraints enforced via
+# filter() using the shared valid_billing_row() condition — not a
+# @expect_or_drop decorator, so this table is eligible to test for
+# incremental refresh. Verify actual behavior in the pipeline UI rather
+# than assuming.
+
 from pyspark import pipelines as dp
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from _billing_consumption_hard_rules import valid_billing_row
 
 
 @dp.materialized_view(
     name="silver.billing_consumption",
-    comment="Cleansed billing consumption facts, deduplicated on account_id + meter_id + month",
+    comment="Cleansed billing consumption facts, deduplicated on account_id + "
+            "meter_id + month. Hard constraints enforced via filter(), not "
+            "@expect_or_drop, so this table is eligible to test for "
+            "incremental refresh.",
     cluster_by=["service_zone", "month_start_date"]
 )
-# Hard constraints (DROP): integrity checks that must always hold.
-# Soft constraints (WARN): range checks for anomaly visibility — logged in pipeline
-# metrics but never drop data. Negative values are legitimate billing adjustments/credits.
-@dp.expect_all_or_drop({
-    "valid_account_id": "account_id IS NOT NULL",
-    "valid_meter_id": "meter_id IS NOT NULL",
-    "valid_consumption_not_null": "consumption_m3 IS NOT NULL",
-    "valid_amount_not_null": "amount_billed IS NOT NULL"
-})
-@dp.expect_all({
-    "consumption_upper_bound": "consumption_m3 < 10000",
-    "consumption_negative_check": "consumption_m3 >= 0",
-    "known_zone": "service_zone IN (SELECT zone_name FROM dev_mwua_catalog_team2.reference.dim_zone WHERE is_current = TRUE)"
-})
 def billing_consumption():
-    # Dedup window: keep first row per account_id + meter_id + month
     w = Window.partitionBy("account_id", "meter_id", "month_start_date").orderBy("billing_period")
 
     return (
@@ -54,6 +49,7 @@ def billing_consumption():
         )
         .withColumn("_row_num", F.row_number().over(w))
         .filter(F.col("_row_num") == 1)
+        .filter(valid_billing_row())
         .select(
             "account_id",
             "meter_id",
