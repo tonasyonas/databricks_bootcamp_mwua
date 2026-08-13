@@ -10,7 +10,6 @@ REFERENCE_CATALOG = spark.conf.get("reference_catalog", "dev_mwua_catalog_team2"
 # To onboard a new contractor:
 #   1. Create a bronze ingestion file (e.g., bronze_works_orders_d.py)
 #   2. Add an entry to this dict with the source table and column mappings
-#   That's it — the pipeline auto-generates the append flow.
 # ============================================================
 CONTRACTORS = {
     "contractor_a": {
@@ -66,7 +65,7 @@ dp.create_streaming_table(
 
 def _enrich_with_zone(df):
     """Join streaming DataFrame against the zone reference table."""
-    dim_zone = (
+    dim_zone = F.broadcast(
         spark.read.table(f"{REFERENCE_CATALOG}.reference.dim_zone")
         .filter(F.col("is_current") == True)
         .select("zone_id", "zone_name")

@@ -4,9 +4,9 @@ from pyspark.sql import functions as F
 VOLUME_PATH = f"{spark.conf.get('volume_base_path')}/finance_erp"
 
 
-@dp.expect("no_rescued_data", "_rescued_data IS NULL")
 @dp.expect_all(
     {
+        "no_rescued_data": "_rescued_data IS NULL",
         "valid_invoice_id": "invoice_id IS NOT NULL",
         "valid_currency": "currency IS NOT NULL AND currency != ''",
         "valid_vendor": "vendor IS NOT NULL",

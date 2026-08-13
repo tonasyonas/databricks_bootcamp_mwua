@@ -3,9 +3,9 @@ from pyspark import pipelines as dp
 VOLUME_PATH = f"{spark.conf.get('volume_base_path')}/contractor_b"
 
 
-@dp.expect("no_rescued_data", "_rescued_data IS NULL")
 @dp.expect_all(
     {
+        "no_rescued_data": "_rescued_data IS NULL",
         "valid_wo_number": "WO_Number IS NOT NULL",
         "valid_amount": "Amount IS NOT NULL AND Amount > 0",
         "valid_date": "CompletionDate IS NOT NULL",
