@@ -63,16 +63,13 @@ resources:
         volume_base_path: ${var.volume_base_path}
         zone_confidence_threshold: "80"
       libraries:
-        - notebook:
-            path: ../src/network/bronze_network_telemetry.py
-        - notebook:
-            path: ../src/network/silver_dim_location_zone.py
-        - notebook:
-            path: ../src/network/silver_network_telemetry.py
-        - notebook:
-            path: ../src/network/gold_network_by_zone_month.py
-        - notebook:
-            path: ../src/network/gold_network_diagnostic_by_zone_month.py
+        # Glob the whole network folder so all dataset files AND the shared
+        # _network_telemetry_hard_rules.py helper deploy under one source root
+        # — this makes `from _network_telemetry_hard_rules import
+        # valid_network_reading` resolve at runtime, and auto-includes the new
+        # quarantine + dq tables without listing each file by hand.
+        - glob:
+            include: ../src/network/**
       tags:
         team: team2
         domain: network
