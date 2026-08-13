@@ -35,7 +35,16 @@ resources:
             pipeline_id: ${resources.pipelines.integration_pipeline.id}
             full_refresh: false
 
+      # --- Alerting: notify on failure AND duration SLA breach ---
       email_notifications:
         on_failure:
           - anita.koo@ncs.com.sg
           - jonas.tua@ncs.com.sg
+        on_duration_warning_threshold_exceeded:
+          - anita.koo@ncs.com.sg
+      health:
+        rules:
+          # Alert if job takes longer than 30 minutes (normally completes in <5)
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 1800

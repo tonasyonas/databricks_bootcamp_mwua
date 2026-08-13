@@ -8,6 +8,7 @@ from pyspark import pipelines as dp
 # WARN only: bronze preserves all data. Investigate rescued rows separately.
 @dp.expect("no_rescued_data", "_rescued_data IS NULL")
 def bronze_billing_customer():
+    volume_base_path = spark.conf.get("volume_base_path", "/Volumes/prd_mwua_capstone_team2/landing/raw")
     return (
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "csv")
@@ -15,5 +16,5 @@ def bronze_billing_customer():
         .option("cloudFiles.inferColumnTypes", "true")
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
         .option("cloudFiles.schemaHints", "account_id STRING, billing_period DATE")
-        .load("/Volumes/prd_mwua_capstone_team2/landing/raw/billing_customer/")
+        .load(f"{volume_base_path}/billing_customer/")
     )

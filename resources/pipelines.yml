@@ -4,9 +4,10 @@ resources:
     billing_pipeline:
       name: "Customer Billing Pipeline - ${var.environment}"
       catalog: ${var.catalog}
-      schema: bronze  # default schema; tables specify their own (bronze/silver/gold)
       serverless: true
       channel: CURRENT
+      configuration:
+        volume_base_path: ${var.volume_base_path}
       libraries:
         - notebook:
             path: ../src/shared/dim_zone.py
@@ -26,7 +27,6 @@ resources:
     finance_contractors_pipeline:
       name: "Finance & Contractors Pipeline - ${var.environment}"
       catalog: ${var.catalog}
-      schema: bronze
       serverless: true
       channel: CURRENT
       configuration:
@@ -58,10 +58,10 @@ resources:
     network_pipeline:
       name: "Network Telemetry Pipeline - ${var.environment}"
       catalog: ${var.catalog}
-      schema: bronze
       serverless: true
       channel: CURRENT
       configuration:
+        volume_base_path: ${var.volume_base_path}
         zone_confidence_threshold: "80"
       libraries:
         - notebook:
@@ -87,7 +87,7 @@ resources:
       channel: CURRENT
       libraries:
         - notebook:
-            path: ../src/integration/gold_cross_cutting_by_zone_month.py
+            path: ../src/integration/gold_cross_cutting_by_zone_month
       tags:
         team: team2
         domain: integration

@@ -197,6 +197,30 @@ def zone_performance_monthly():
         )
     )
 
+    # === Data freshness detection ===
+    # Flag months that are "expected" to have data based on current date
+    # If a recent month has NULLs, upstream pipeline may have failed
+    result = (
+        result
+        .withColumn("_months_ago",
+            F.months_between(F.current_date(), F.col("month_start_date")).cast("int")
+        )
+        .withColumn("data_freshness_flag",
+            F.when(F.col("_months_ago") <= 1,  # current or previous month
+                F.when(F.col("data_sources_available") >= 3, "FRESH")
+                .when(F.col("data_sources_available") >= 1, "PARTIAL")
+                .otherwise("STALE")
+            )
+            .when(F.col("_months_ago") <= 3,  # 2-3 months ago — should have all data
+                F.when(F.col("data_sources_available") >= 3, "FRESH")
+                .otherwise("INCOMPLETE")
+            )
+            .otherwise("HISTORICAL")  # older months — accepted as-is
+        )
+        .withColumn("refresh_timestamp", F.current_timestamp())
+        .drop("_months_ago")
+    )
+
     # === Final select (explicit column order for documentation) ===
     return result.select(
         # Identity & time
@@ -231,6 +255,9 @@ def zone_performance_monthly():
         # Operational flags
         "cost_recovery_flag",
         "network_reliability_flag",
-        "data_sources_available"
+        "data_sources_available",
+        # Freshness
+        "data_freshness_flag",
+        "refresh_timestamp"
     )
 
