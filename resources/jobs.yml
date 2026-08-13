@@ -1,1 +1,50 @@
-resources: {}
+resources:
+  jobs:
+    # Orchestration: run all pipelines with dependency graph
+    mwua_daily_refresh:
+      name: "MWUA Daily Refresh - ${var.environment}"
+      tags:
+        team: team2
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"  # Daily at 6am SGT
+        timezone_id: Asia/Singapore
+      tasks:
+        # --- Tier 1: Domain pipelines (run in parallel) ---
+        - task_key: uc1_billing
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.billing_pipeline.id}
+            full_refresh: false
+
+        - task_key: uc2_finance_contractors
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.finance_contractors_pipeline.id}
+            full_refresh: false
+
+        - task_key: uc3_network
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.network_pipeline.id}
+            full_refresh: false
+
+        # --- Tier 2: Integration (depends on all Tier 1) ---
+        - task_key: integration_zone_performance
+          depends_on:
+            - task_key: uc1_billing
+            - task_key: uc2_finance_contractors
+            - task_key: uc3_network
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.integration_pipeline.id}
+            full_refresh: false
+
+      # --- Alerting: notify on failure AND duration SLA breach ---
+      email_notifications:
+        on_failure:
+          - anita.koo@ncs.com.sg
+          - jonas.tua@ncs.com.sg
+        on_duration_warning_threshold_exceeded:
+          - anita.koo@ncs.com.sg
+      health:
+        rules:
+          # Alert if job takes longer than 30 minutes (normally completes in <5)
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 1800

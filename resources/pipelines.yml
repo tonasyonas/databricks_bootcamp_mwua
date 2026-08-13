@@ -1,19 +1,92 @@
 resources:
   pipelines:
-    bronze_ingestion:
-      name: bronze_ingestion
+    # UC1: Customer Billing
+    billing_pipeline:
+      name: "Customer Billing Pipeline - ${var.environment}"
       catalog: ${var.catalog}
-      schema: bronze
       serverless: true
       channel: CURRENT
       configuration:
         volume_base_path: ${var.volume_base_path}
       libraries:
+        - notebook:
+            path: ../src/shared/dim_zone.py
+        # Glob the whole billing folder so all dataset files AND the shared
+        # _billing_consumption_hard_rules.py helper deploy under one source
+        # root — this is what makes `from _billing_consumption_hard_rules
+        # import valid_billing_row` resolve at runtime, and it auto-includes
+        # the new quarantine + dq tables without listing each file by hand.
         - glob:
-            include: ../src/finance/bronze_finance_invoices.py
-        - glob:
-            include: ../src/contractors/bronze_works_orders_a.py
-        - glob:
-            include: ../src/contractors/bronze_works_orders_b.py
-        - glob:
-            include: ../src/contractors/bronze_works_orders_c.py
+            include: ../src/billing/**
+      tags:
+        team: team2
+        domain: billing
+
+    # UC2: Finance & Contractors
+    finance_contractors_pipeline:
+      name: "Finance & Contractors Pipeline - ${var.environment}"
+      catalog: ${var.catalog}
+      serverless: true
+      channel: CURRENT
+      configuration:
+        volume_base_path: ${var.volume_base_path}
+      libraries:
+        - notebook:
+            path: ../src/finance/bronze_finance_invoices.py
+        - notebook:
+            path: ../src/finance/silver_finance_invoices.py
+        - notebook:
+            path: ../src/finance/silver_finance_invoice_line_items.py
+        - notebook:
+            path: ../src/finance/gold_spend_by_zone_month.py
+        - notebook:
+            path: ../src/contractors/bronze_works_orders_a.py
+        - notebook:
+            path: ../src/contractors/bronze_works_orders_b.py
+        - notebook:
+            path: ../src/contractors/bronze_works_orders_c.py
+        - notebook:
+            path: ../src/contractors/silver_works_orders.py
+        - notebook:
+            path: ../src/contractors/gold_contractor_by_zone_month.py
+      tags:
+        team: team2
+        domain: finance
+
+    # UC3: Network Telemetry
+    network_pipeline:
+      name: "Network Telemetry Pipeline - ${var.environment}"
+      catalog: ${var.catalog}
+      serverless: true
+      channel: CURRENT
+      configuration:
+        volume_base_path: ${var.volume_base_path}
+        zone_confidence_threshold: "80"
+      libraries:
+        - notebook:
+            path: ../src/network/bronze_network_telemetry.py
+        - notebook:
+            path: ../src/network/silver_dim_location_zone.py
+        - notebook:
+            path: ../src/network/silver_network_telemetry.py
+        - notebook:
+            path: ../src/network/gold_network_by_zone_month.py
+        - notebook:
+            path: ../src/network/gold_network_diagnostic_by_zone_month.py
+      tags:
+        team: team2
+        domain: network
+
+    # Integration: Cross-cutting zone performance
+    integration_pipeline:
+      name: "Integration Pipeline - Zone Performance - ${var.environment}"
+      catalog: ${var.catalog}
+      schema: gold
+      serverless: true
+      channel: CURRENT
+      libraries:
+        - notebook:
+            path: ../src/integration/gold_cross_cutting_by_zone_month
+      tags:
+        team: team2
+        domain: integration
