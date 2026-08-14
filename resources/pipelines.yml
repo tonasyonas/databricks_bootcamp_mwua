@@ -8,9 +8,8 @@ resources:
       channel: CURRENT
       configuration:
         volume_base_path: ${var.volume_base_path}
+        target_catalog: ${var.catalog}
       libraries:
-        - notebook:
-            path: ../src/shared/dim_zone.py
         # Glob the whole billing folder so all dataset files AND the shared
         # _billing_consumption_hard_rules.py helper deploy under one source
         # root — this is what makes `from _billing_consumption_hard_rules
@@ -62,6 +61,7 @@ resources:
       configuration:
         volume_base_path: ${var.volume_base_path}
         zone_confidence_threshold: "80"
+        target_catalog: ${var.catalog}
       libraries:
         # Glob the whole network folder so all dataset files AND the shared
         # _network_telemetry_hard_rules.py helper deploy under one source root
@@ -81,6 +81,8 @@ resources:
       schema: gold
       serverless: true
       channel: CURRENT
+      configuration:
+        target_catalog: ${var.catalog}
       libraries:
         - notebook:
             path: ../src/integration/gold_cross_cutting_by_zone_month

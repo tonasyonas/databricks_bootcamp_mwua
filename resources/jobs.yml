@@ -34,7 +34,6 @@ resources:
           pipeline_task:
             pipeline_id: ${resources.pipelines.integration_pipeline.id}
             full_refresh: false
-
       # --- Alerting: notify on failure AND duration SLA breach ---
       email_notifications:
         on_failure:
@@ -48,3 +47,15 @@ resources:
           - metric: RUN_DURATION_SECONDS
             op: GREATER_THAN
             value: 1800
+    dim_zone_setup:
+        name: "dim_zone Setup - ${var.environment}"
+        tags:
+          team: team2
+          # No 'schedule:' block — this job never fires on its own.
+          # It only runs when explicitly called, e.g. from CI/CD.
+        tasks:
+          - task_key: setup_dim_zone
+            notebook_task:
+               notebook_path: ../setup/00_dim_zone_setup.py
+               base_parameters:
+                target_catalog: ${var.catalog}

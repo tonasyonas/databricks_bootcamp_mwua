@@ -2,6 +2,8 @@ from pyspark import pipelines as dp
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
+target_catalog = spark.conf.get("target_catalog", "dev_mwua_catalog_team2")
+
 
 @dp.materialized_view(
     name="silver.dim_location_zone",
@@ -13,7 +15,7 @@ from pyspark.sql.window import Window
     "valid_resolved_zone": "resolved_zone IS NOT NULL"
 })
 @dp.expect_all({
-    "known_zone": "resolved_zone IN (SELECT zone_name FROM dev_mwua_catalog_team2.reference.dim_zone WHERE is_current = TRUE)",
+    "known_zone": f"resolved_zone IN (SELECT zone_name FROM {target_catalog}.reference.dim_zone WHERE is_current = TRUE)",
     "high_confidence": "confidence_pct >= 80.0"
 })
 def dim_location_zone():
