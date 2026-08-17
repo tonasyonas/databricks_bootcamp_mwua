@@ -1,4 +1,4 @@
-name: "Deploy Customer Billing Pipeline"
+name: "Deploy MWUA Pipeline"
 
 on:
   pull_request:
@@ -9,16 +9,13 @@ on:
       - main
 
 jobs:
-  # Validate bundle on every PR
   validate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
-
       - name: Validate bundle
         run: databricks bundle validate -t prod
         env:
@@ -26,13 +23,11 @@ jobs:
           DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
           DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
-  # Deploy to production on merge to main
   deploy-prod:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Databricks CLI
         uses: databricks/setup-cli@main
 
@@ -43,8 +38,20 @@ jobs:
           DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
           DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
-      - name: Run pipeline update
-        run: databricks bundle run -t prod customer_billing
+      # Must run first — domain pipelines' known_zone checks depend on
+      # dim_zone being populated. Safe to call on every deploy: the script
+      # checks for existing rows and skips the seed if already done.
+      - name: Setup dim_zone (idempotent)
+        run: databricks bundle run -t prod dim_zone_setup
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+
+      # Runs all 4 domain/integration pipelines via the job's own dependency
+      # graph (Tier 1 parallel, Tier 2 waits) — one call, not four.
+      - name: Run daily refresh
+        run: databricks bundle run -t prod mwua_daily_refresh
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}

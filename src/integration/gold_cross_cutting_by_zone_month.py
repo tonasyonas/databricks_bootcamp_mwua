@@ -1,6 +1,19 @@
 # Databricks notebook source
+# Databricks notebook source
+#
+# ARCHITECTURE NOTE — Gold reads Gold, deliberately:
+# This table combines four already-published Gold tables rather than
+# re-deriving from Silver facts. That's an intentional rollup pattern, not
+# a layering violation: billing, invoice, work-order, and sensor records
+# don't share a row-level grain to integrate at before aggregation — each
+# domain's rollup to zone x month effectively IS the integration point.
+# A Silver "integration" layer would only add value if these domains shared
+# a joinable row-level identity, which they don't.
+
 from pyspark import pipelines as dp
 from pyspark.sql import functions as F
+
+target_catalog = spark.conf.get("target_catalog", "dev_mwua_catalog_team2")
 
 
 @dp.materialized_view(
@@ -36,13 +49,12 @@ def zone_performance_monthly():
 
     # === Reference: dim_zone ===
     dim_zone = (
-        spark.read.table("dev_mwua_catalog_team2.reference.dim_zone")
+        spark.read.table(f"{target_catalog}.reference.dim_zone")
         .filter(F.col("is_current") == True)
         .select("zone_name", "region", "population_served", "sla_response_hours")
     )
 
     # === Spine: all zone × month combinations ===
-    # Collect all months from all upstream tables to build complete spine
     months_billing = (
         spark.read.table("gold.billing_by_zone_month")
         .select(F.col("month_start_date"))
@@ -146,27 +158,22 @@ def zone_performance_monthly():
     # === Derived KPIs ===
     result = (
         joined
-        # Total OPEX
         .withColumn("total_opex_sgd",
             F.coalesce(F.col("total_invoice_spend_sgd"), F.lit(0)) +
             F.coalesce(F.col("total_contractor_cost_sgd"), F.lit(0))
         )
-        # Efficiency: cost per cubic metre delivered
         .withColumn("opex_per_m3",
             F.when(F.col("total_consumption_m3") > 0,
                    F.round(F.col("total_opex_sgd") / F.col("total_consumption_m3"), 2))
         )
-        # Revenue risk: dollar value of potentially uncollectable billing
         .withColumn("revenue_at_risk_sgd",
             F.when(F.col("total_billed_sgd").isNotNull() & F.col("overdue_rate_pct").isNotNull(),
                    F.round(F.col("overdue_rate_pct") / 100 * F.col("total_billed_sgd"), 2))
         )
-        # Cost recovery: are we billing enough to cover operations?
         .withColumn("cost_recovery_ratio",
             F.when((F.col("total_opex_sgd") > 0) & F.col("total_billed_sgd").isNotNull(),
                    F.round(F.col("total_billed_sgd") / F.col("total_opex_sgd"), 2))
         )
-        # Per-capita normalization
         .withColumn("consumption_per_capita_m3",
             F.when(F.col("population_served") > 0,
                    F.round(F.col("total_consumption_m3") / F.col("population_served"), 4))
@@ -175,7 +182,6 @@ def zone_performance_monthly():
             F.when(F.col("population_served") > 0,
                    F.round(F.col("total_opex_sgd") / F.col("population_served"), 4))
         )
-        # Operational flags (RAG)
         .withColumn("cost_recovery_flag",
             F.when(F.col("cost_recovery_ratio").isNull(), None)
             .when(F.col("cost_recovery_ratio") < 0.8, "RED")
@@ -188,7 +194,6 @@ def zone_performance_monthly():
             .when(F.col("telemetry_reliability_pct") < 80, "AMBER")
             .otherwise("GREEN")
         )
-        # Data completeness indicator
         .withColumn("data_sources_available",
             (F.when(F.col("total_consumption_m3").isNotNull(), 1).otherwise(0) +
              F.when(F.col("total_invoice_spend_sgd").isNotNull(), 1).otherwise(0) +
@@ -198,24 +203,22 @@ def zone_performance_monthly():
     )
 
     # === Data freshness detection ===
-    # Flag months that are "expected" to have data based on current date
-    # If a recent month has NULLs, upstream pipeline may have failed
     result = (
         result
         .withColumn("_months_ago",
             F.months_between(F.current_date(), F.col("month_start_date")).cast("int")
         )
         .withColumn("data_freshness_flag",
-            F.when(F.col("_months_ago") <= 1,  # current or previous month
+            F.when(F.col("_months_ago") <= 1,
                 F.when(F.col("data_sources_available") >= 3, "FRESH")
                 .when(F.col("data_sources_available") >= 1, "PARTIAL")
                 .otherwise("STALE")
             )
-            .when(F.col("_months_ago") <= 3,  # 2-3 months ago — should have all data
+            .when(F.col("_months_ago") <= 3,
                 F.when(F.col("data_sources_available") >= 3, "FRESH")
                 .otherwise("INCOMPLETE")
             )
-            .otherwise("HISTORICAL")  # older months — accepted as-is
+            .otherwise("HISTORICAL")
         )
         .withColumn("refresh_timestamp", F.current_timestamp())
         .drop("_months_ago")
@@ -223,41 +226,13 @@ def zone_performance_monthly():
 
     # === Final select (explicit column order for documentation) ===
     return result.select(
-        # Identity & time
-        "zone_name",
-        "region",
-        "population_served",
-        "sla_response_hours",
-        "month_start_date",
-        # UC1: Billing
-        "total_consumption_m3",
-        "total_billed_sgd",
-        "total_accounts",
-        "overdue_count",
-        "overdue_rate_pct",
-        # UC2: Finance
-        "total_invoice_spend_sgd",
-        "invoice_line_count",
-        # UC2: Contractors
-        "total_work_orders",
-        "total_contractor_cost_sgd",
-        # UC3: Network
-        "avg_pressure_bar",
-        "avg_flow_lpm",
-        "telemetry_reliability_pct",
-        # Derived KPIs
-        "total_opex_sgd",
-        "opex_per_m3",
-        "revenue_at_risk_sgd",
-        "cost_recovery_ratio",
-        "consumption_per_capita_m3",
-        "opex_per_capita_sgd",
-        # Operational flags
-        "cost_recovery_flag",
-        "network_reliability_flag",
-        "data_sources_available",
-        # Freshness
-        "data_freshness_flag",
-        "refresh_timestamp"
+        "zone_name", "region", "population_served", "sla_response_hours", "month_start_date",
+        "total_consumption_m3", "total_billed_sgd", "total_accounts", "overdue_count", "overdue_rate_pct",
+        "total_invoice_spend_sgd", "invoice_line_count",
+        "total_work_orders", "total_contractor_cost_sgd",
+        "avg_pressure_bar", "avg_flow_lpm", "telemetry_reliability_pct",
+        "total_opex_sgd", "opex_per_m3", "revenue_at_risk_sgd", "cost_recovery_ratio",
+        "consumption_per_capita_m3", "opex_per_capita_sgd",
+        "cost_recovery_flag", "network_reliability_flag", "data_sources_available",
+        "data_freshness_flag", "refresh_timestamp"
     )
-

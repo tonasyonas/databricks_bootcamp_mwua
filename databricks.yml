@@ -10,10 +10,10 @@ variables:
     default: dev_mwua_catalog_team2
   environment:
     description: Environment name (dev/prod) used in pipeline and job display names
-    default: Dev
+    default: dev
   volume_base_path:
     description: Base Unity Catalog volume path for raw source files
-    default: /Volumes/prd_mwua_capstone_team2/landing/raw
+    default: /Volumes/dev_mwua_catalog_team2/landing/raw
 
 targets:
   dev:
@@ -23,16 +23,18 @@ targets:
       host: https://dbc-d8b9acd9-b19b.cloud.databricks.com
     variables:
       catalog: dev_mwua_catalog_team2
-      environment: Dev
-      volume_base_path: /Volumes/prd_mwua_capstone_team2/landing/raw
+      environment: dev
+      volume_base_path: /Volumes/dev_mwua_catalog_team2/landing/raw
 
   prod:
     mode: production
     workspace:
       host: https://dbc-d8b9acd9-b19b.cloud.databricks.com
+    run_as:
+      service_principal_name: "1b098ece-d1e0-4bc5-9d03-40ee55abe53e"
     variables:
       catalog: prd_mwua_capstone_team2
-      environment: Prod
+      environment: prod
       volume_base_path: /Volumes/prd_mwua_capstone_team2/landing/raw
     git:
       branch: main
