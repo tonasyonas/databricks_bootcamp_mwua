@@ -8,6 +8,11 @@ on:
     branches:
       - main
 
+env:
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+
 jobs:
   validate:
     if: github.event_name == 'pull_request'
@@ -18,10 +23,6 @@ jobs:
         uses: databricks/setup-cli@main
       - name: Validate bundle
         run: databricks bundle validate -t prod
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
-          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
 
   deploy-prod:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
