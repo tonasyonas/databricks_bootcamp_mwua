@@ -74,7 +74,7 @@ resources:
         target_catalog: ${var.catalog}
       libraries:
         - glob:
-            include: ../src/intergration/**
+            include: ../src/integration/**
       tags:
         team: team2
         domain: integration
