@@ -30,24 +30,10 @@ resources:
       configuration:
         volume_base_path: ${var.volume_base_path}
       libraries:
-        - notebook:
-            path: ../src/finance/bronze_finance_invoices.py
-        - notebook:
-            path: ../src/finance/silver_finance_invoices.py
-        - notebook:
-            path: ../src/finance/silver_finance_invoice_line_items.py
-        - notebook:
-            path: ../src/finance/gold_spend_by_zone_month.py
-        - notebook:
-            path: ../src/contractors/bronze_works_orders_a.py
-        - notebook:
-            path: ../src/contractors/bronze_works_orders_b.py
-        - notebook:
-            path: ../src/contractors/bronze_works_orders_c.py
-        - notebook:
-            path: ../src/contractors/silver_works_orders.py
-        - notebook:
-            path: ../src/contractors/gold_contractor_by_zone_month.py
+        - glob:
+            include: ../src/finance/**
+        - glob:
+            include: ../src/contractors/**
       tags:
         team: team2
         domain: finance
