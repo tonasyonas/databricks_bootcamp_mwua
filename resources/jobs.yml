@@ -1,6 +1,7 @@
 resources:
   jobs:
-    # Orchestration: run all pipelines with dependency graph
+    # Billing + Finance/Contractors + Integration — daily batch, matches
+    # billing cycles and invoice/work-order export frequency
     mwua_daily_refresh:
       name: "MWUA Daily Refresh - ${var.environment}"
       tags:
@@ -9,7 +10,6 @@ resources:
         quartz_cron_expression: "0 0 6 * * ?"  # Daily at 6am SGT
         timezone_id: Asia/Singapore
       tasks:
-        # --- Tier 1: Domain pipelines (run in parallel) ---
         - task_key: uc1_billing
           pipeline_task:
             pipeline_id: ${resources.pipelines.billing_pipeline.id}
@@ -20,21 +20,19 @@ resources:
             pipeline_id: ${resources.pipelines.finance_contractors_pipeline.id}
             full_refresh: false
 
-        - task_key: uc3_network
-          pipeline_task:
-            pipeline_id: ${resources.pipelines.network_pipeline.id}
-            full_refresh: false
-
-        # --- Tier 2: Integration (depends on all Tier 1) ---
+        # Depends only on uc1 + uc2 as tasks. Network is NOT a task
+        # dependency here — it runs on its own faster schedule (below),
+        # so by 6am its Gold tables are already fresh within ~15 min.
+        # Integration reads that latest state rather than waiting on a
+        # same-run network task — deliberate eventual consistency, not
+        # an oversight.
         - task_key: integration_zone_performance
           depends_on:
             - task_key: uc1_billing
             - task_key: uc2_finance_contractors
-            - task_key: uc3_network
           pipeline_task:
             pipeline_id: ${resources.pipelines.integration_pipeline.id}
             full_refresh: false
-      # --- Alerting: notify on failure AND duration SLA breach ---
       email_notifications:
         on_failure:
           - anita.koo@ncs.com.sg
@@ -43,19 +41,38 @@ resources:
           - anita.koo@ncs.com.sg
       health:
         rules:
-          # Alert if job takes longer than 30 minutes (normally completes in <5)
           - metric: RUN_DURATION_SECONDS
             op: GREATER_THAN
             value: 1800
+
+    # Network Telemetry — 15-minute cadence, sized against dim_zone's
+    # own sla_response_hours (4-6 hrs), comfortable margin without
+    # paying for always-on continuous compute
+    network_pipeline_refresh:
+      name: "Network Telemetry Refresh - ${var.environment}"
+      tags:
+        team: team2
+        domain: network
+      schedule:
+        quartz_cron_expression: "0 */15 * * * ?"
+        timezone_id: Asia/Singapore
+      tasks:
+        - task_key: uc3_network
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.network_pipeline.id}
+            full_refresh: false
+      email_notifications:
+        on_failure:
+          - anita.koo@ncs.com.sg
+          - jonas.tua@ncs.com.sg
+
     dim_zone_setup:
-        name: "dim_zone Setup - ${var.environment}"
-        tags:
-          team: team2
-          # No 'schedule:' block — this job never fires on its own.
-          # It only runs when explicitly called, e.g. from CI/CD.
-        tasks:
-          - task_key: setup_dim_zone
-            notebook_task:
-               notebook_path: ../setup/00_dim_zone_setup.py
-               base_parameters:
-                target_catalog: ${var.catalog}
+      name: "dim_zone Setup - ${var.environment}"
+      tags:
+        team: team2
+      tasks:
+        - task_key: setup_dim_zone
+          notebook_task:
+            notebook_path: ../setup/00_dim_zone_setup.py
+            base_parameters:
+              target_catalog: ${var.catalog}
