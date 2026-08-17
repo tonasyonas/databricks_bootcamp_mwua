@@ -11,6 +11,11 @@
 dbutils.widgets.text("target_catalog", "dev_mwua_catalog_team2")
 target_catalog = dbutils.widgets.get("target_catalog")
 
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DateType, BooleanType
+import datetime
+
+
 spark.sql(f"""
 CREATE SCHEMA IF NOT EXISTS {target_catalog}.reference
 COMMENT 'Shared reference/master data tables. Governed by the platform team. Read by all pipelines, written only by authorised personnel.'
@@ -47,19 +52,28 @@ existing_count = spark.sql(
 if existing_count > 0:
     print(f"dim_zone already has {existing_count} rows in {target_catalog} — already initialized, skipping seed.")
 else:
-    zone_seed_data = [
-        ("A", "Zone A - Bukit Timah", "Bukit Timah", "Central",   380000, None, 4, "2015-01-01", None, True),
-        ("B", "Zone B - Tampines",    "Tampines",    "East",      420000, None, 4, "2015-01-01", None, True),
-        ("C", "Zone C - Jurong",      "Jurong",      "West",      450000, None, 6, "2015-01-01", None, True),
-        ("D", "Zone D - Woodlands",   "Woodlands",   "North",     390000, None, 6, "2015-01-01", None, True),
-        ("E", "Zone E - Punggol",     "Punggol",     "Northeast", 350000, None, 4, "2015-01-01", None, True),
-        ("F", "Zone F - Pasir Ris",   "Pasir Ris",   "East",      280000, None, 4, "2015-01-01", None, True),
-    ]
-    seed_df = spark.createDataFrame(
-        zone_seed_data,
-        ["zone_id", "zone_name", "district", "region", "population_served",
-         "district_manager", "sla_response_hours", "effective_from", "effective_to", "is_current"]
-    ).withColumn("effective_from", F.to_date("effective_from"))
+    zone_schema = StructType([
+        StructField("zone_id", StringType(), False),
+        StructField("zone_name", StringType(), False),
+        StructField("district", StringType(), True),
+        StructField("region", StringType(), True),
+        StructField("population_served", IntegerType(), True),
+        StructField("district_manager", StringType(), True),
+        StructField("sla_response_hours", IntegerType(), True),
+        StructField("effective_from", DateType(), False),
+        StructField("effective_to", DateType(), True),
+        StructField("is_current", BooleanType(), False),
+    ])
 
+    zone_seed_data = [
+        ("A", "Zone A - Bukit Timah", "Bukit Timah", "Central",   380000, None, 4, datetime.date(2015, 1, 1), None, True),
+        ("B", "Zone B - Tampines",    "Tampines",    "East",      420000, None, 4, datetime.date(2015, 1, 1), None, True),
+        ("C", "Zone C - Jurong",      "Jurong",      "West",      450000, None, 6, datetime.date(2015, 1, 1), None, True),
+        ("D", "Zone D - Woodlands",   "Woodlands",   "North",     390000, None, 6, datetime.date(2015, 1, 1), None, True),
+        ("E", "Zone E - Punggol",     "Punggol",     "Northeast", 350000, None, 4, datetime.date(2015, 1, 1), None, True),
+        ("F", "Zone F - Pasir Ris",   "Pasir Ris",   "East",      280000, None, 4, datetime.date(2015, 1, 1), None, True),
+    ]
+
+    seed_df = spark.createDataFrame(zone_seed_data, schema=zone_schema)
     seed_df.write.mode("append").saveAsTable(f"{target_catalog}.reference.dim_zone")
     print(f"Seed complete for {target_catalog}. Inserted {seed_df.count()} zones.")
