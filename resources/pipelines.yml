@@ -4,6 +4,7 @@ resources:
     billing_pipeline:
       name: "Customer Billing Pipeline - ${var.environment}"
       catalog: ${var.catalog}
+      schema: bronze
       serverless: true
       channel: CURRENT
       configuration:
@@ -25,6 +26,7 @@ resources:
     finance_contractors_pipeline:
       name: "Finance & Contractors Pipeline - ${var.environment}"
       catalog: ${var.catalog}
+      schema: bronze
       serverless: true
       channel: CURRENT
       configuration:
@@ -42,6 +44,7 @@ resources:
     network_pipeline:
       name: "Network Telemetry Pipeline - ${var.environment}"
       catalog: ${var.catalog}
+      schema: bronze
       serverless: true
       channel: CURRENT
       configuration:
