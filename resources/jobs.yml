@@ -9,6 +9,7 @@ resources:
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"  # Daily at 6am SGT
         timezone_id: Asia/Singapore
+        pause_status: PAUSED
       tasks:
         - task_key: uc1_billing
           pipeline_task:
@@ -56,6 +57,7 @@ resources:
       schedule:
         quartz_cron_expression: "0 */15 * * * ?"
         timezone_id: Asia/Singapore
+        pause_status: PAUSED
       tasks:
         - task_key: uc3_network
           pipeline_task:
